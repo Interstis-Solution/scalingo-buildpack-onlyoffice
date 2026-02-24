@@ -178,6 +178,28 @@ cmn::step::finish
 
 # -----------------------------------------------------------------------------
 
+cmn::step::start "Installing Custom Fonts"
+
+custom_fonts_src="${build_dir}/custom-fonts"
+
+if [ -d "${custom_fonts_src}" ]; then
+	font_count="$( find "${custom_fonts_src}" -maxdepth 1 -type f \( -name "*.ttf" -o -name "*.otf" \) | wc -l | tr -d ' ' )"
+	if [ "${font_count}" -gt 0 ]; then
+		cmn::task::start "Copying ${font_count} custom font(s) to core-fonts"
+		find "${custom_fonts_src}" -maxdepth 1 -type f \( -name "*.ttf" -o -name "*.otf" \) \
+			-exec cp {} "${build_dir}/core-fonts/" \;
+		cmn::task::finish
+	else
+		cmn::output::info "custom-fonts/ directory is empty, skipping."
+	fi
+else
+	cmn::output::info "No custom-fonts/ directory found, skipping."
+fi
+
+cmn::step::finish
+
+# -----------------------------------------------------------------------------
+
 cmn::step::start "Generating Files"
 
 LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${build_dir}/server/FileConverter/bin"
