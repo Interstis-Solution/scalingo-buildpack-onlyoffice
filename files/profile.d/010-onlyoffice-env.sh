@@ -92,3 +92,24 @@ export OO_S3_USE_PATH_STYLE
 if [ -n "${OO_DS_LICENCE:-}" ]; then
 	echo "${OO_DS_LICENCE}" | base64 --decode > /app/data/license.lic
 fi
+
+# Auto-calculate memory limits from cgroup (overridable via env vars)
+_CGROUP_MEM_BYTES=""
+if [ -f /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
+    _CGROUP_MEM_BYTES=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
+elif [ -f /sys/fs/cgroup/memory.max ] && [ "$(cat /sys/fs/cgroup/memory.max)" != "max" ]; then
+    _CGROUP_MEM_BYTES=$(cat /sys/fs/cgroup/memory.max)
+fi
+
+if [ -n "$_CGROUP_MEM_BYTES" ] && [ "$_CGROUP_MEM_BYTES" -gt 0 ] 2>/dev/null; then
+    _MEM_MB=$(( _CGROUP_MEM_BYTES / 1024 / 1024 ))
+    # x2t gets 50% of container memory
+    _X2T_MB=$(( _MEM_MB * 50 / 100 ))
+    # Node.js heap gets 35% of container memory (leaves room for x2t + OS)
+    _NODE_MB=$(( _MEM_MB * 35 / 100 ))
+
+    export X2T_MEMORY_LIMIT="${_X2T_MB}MB"
+    export NODE_OPTIONS="--max-old-space-size=${_NODE_MB}"
+
+    echo "[onlyoffice-env] Container: ${_MEM_MB}MB → X2T_MEMORY_LIMIT=${X2T_MEMORY_LIMIT} NODE_OPTIONS=${NODE_OPTIONS}"
+fi
