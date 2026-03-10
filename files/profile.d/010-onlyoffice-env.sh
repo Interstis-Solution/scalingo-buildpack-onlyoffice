@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Ensure runtime config directory exists (avoids getFsType ENOENT warning)
+mkdir -p /app/config/runtime
+
 export OO_DS_RABBITMQ_URL="${OO_DS_RABBITMQ_URL:-""}"
 
 # Detect if TLS is used (rediss://)
