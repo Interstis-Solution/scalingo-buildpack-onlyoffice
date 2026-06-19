@@ -31,7 +31,6 @@ onlyoffice_dir="${tmp_dir}/onlyoffice-${version}"
 # Source directory, containing the files we're interested in:
 src="${onlyoffice_dir}/var/www/onlyoffice/documentserver"
 
-#TODO: provide our own default file in files?
 custom_config_file="${build_dir}/production.json"
 
 # Path to the configuration directory:
@@ -114,30 +113,28 @@ then
 	exit 15
 fi
 
-if ! cp "${buildpack_dir}/files/production.json.erb" "${config_dir}/" \
-		2>/dev/null
-then
-	cmn::task::fail "Unable to copy custom configuration template, aborting."
-	cmn::step::fail
-	exit 16
+if [ ! -f "${config_dir}/production.json.erb" ]; then
+	if ! cp "${buildpack_dir}/files/production.json.erb" "${config_dir}/" \
+			2>/dev/null
+	then
+		cmn::task::fail "Unable to copy custom configuration template, aborting."
+		cmn::step::fail
+		exit 16
+	fi
+else
+	cmn::output::info "Custom configuration template already exists, skipping."
 fi
 
-if ! cp "${buildpack_dir}/files/default.json" "${config_dir}/" \
-		2>/dev/null
-then
-	cmn::task::fail "Unable to copy default configuration template, aborting."
-	cmn::step::fail
-	exit 16
-fi
-
-mkdir --parents "${config_dir}/metrics"
-
-if ! cp "${buildpack_dir}/files/metrics/config.js" "${config_dir}/metrics/" \
-		2>/dev/null
-then
-	cmn::task::fail "Unable to copy configuration metrics"
-	cmn::step::fail
-	exit 16
+if [ ! -f "${config_dir}/default.json" ]; then
+	if ! cp "${onlyoffice_dir}/etc/onlyoffice/documentserver/default.json" "${config_dir}/" \
+			2>/dev/null
+	then
+		cmn::task::fail "Unable to copy default configuration template, aborting."
+		cmn::step::fail
+		exit 16
+	fi
+else
+	cmn::output::info "Default configuration already exists, skipping."
 fi
 
 mkdir --parents "${build_dir}/bin"
@@ -161,6 +158,28 @@ fi
 chmod +x "${build_dir}/bin"/*
 
 cmn::task::finish
+
+cmn::step::finish
+
+# -----------------------------------------------------------------------------
+
+cmn::step::start "Installing Custom Fonts"
+
+custom_fonts_src="${build_dir}/custom-fonts"
+
+if [ -d "${custom_fonts_src}" ]; then
+	font_count="$( find "${custom_fonts_src}" -maxdepth 1 -type f \( -name "*.ttf" -o -name "*.otf" \) | wc -l | tr -d ' ' )"
+	if [ "${font_count}" -gt 0 ]; then
+		cmn::task::start "Copying ${font_count} custom font(s) to core-fonts"
+		find "${custom_fonts_src}" -maxdepth 1 -type f \( -name "*.ttf" -o -name "*.otf" \) \
+			-exec cp {} "${build_dir}/core-fonts/" \;
+		cmn::task::finish
+	else
+		cmn::output::info "custom-fonts/ directory is empty, skipping."
+	fi
+else
+	cmn::output::info "No custom-fonts/ directory found, skipping."
+fi
 
 cmn::step::finish
 
