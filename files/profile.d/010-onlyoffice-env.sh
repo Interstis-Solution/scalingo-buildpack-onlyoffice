@@ -106,13 +106,30 @@ fi
 
 if [ -n "$_CGROUP_MEM_BYTES" ] && [ "$_CGROUP_MEM_BYTES" -gt 0 ] 2>/dev/null; then
     _MEM_MB=$(( _CGROUP_MEM_BYTES / 1024 / 1024 ))
-    # x2t gets 50% of container memory
-    _X2T_MB=$(( _MEM_MB * 50 / 100 ))
     # Node.js heap gets 35% of container memory (leaves room for x2t + OS)
     _NODE_MB=$(( _MEM_MB * 35 / 100 ))
 
-    export X2T_MEMORY_LIMIT="${_X2T_MB}MB"
-    export NODE_OPTIONS="--max-old-space-size=${_NODE_MB}"
+    if [ -n "${OO_DS_CONVERTER_MAXPROCESSCOUNT:-}" ]; then
+        # Explicit converter parallelism: the x2t budget is what remains once the
+        # Node.js heap and the OS/nginx reserve are set aside, shared across the
+        # concurrent x2t processes. Keep in sync with
+        # FileConverter.converter.maxprocesscount in production.json.
+        _NPROC="${OO_DS_CONVERTER_MAXPROCESSCOUNT}"
+        case "$_NPROC" in ''|*[!0-9]*) _NPROC=1 ;; esac
+        [ "$_NPROC" -lt 1 ] && _NPROC=1
 
-    echo "[onlyoffice-env] Container: ${_MEM_MB}MB → X2T_MEMORY_LIMIT=${X2T_MEMORY_LIMIT} NODE_OPTIONS=${NODE_OPTIONS}"
+        _RESERVED_MB="${OO_DS_MEM_RESERVED_MB:-500}"
+        _X2T_MB=$(( (_MEM_MB - _NODE_MB - _RESERVED_MB) / _NPROC ))
+        # Never hand out an unusable budget on small containers:
+        [ "$_X2T_MB" -lt 256 ] && _X2T_MB=256
+    else
+        # Historical behaviour, kept byte-for-byte when parallelism is not set:
+        _NPROC=1
+        _X2T_MB=$(( _MEM_MB * 50 / 100 ))
+    fi
+
+    export X2T_MEMORY_LIMIT="${X2T_MEMORY_LIMIT:-${_X2T_MB}MB}"
+    export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=${_NODE_MB}}"
+
+    echo "[onlyoffice-env] Container: ${_MEM_MB}MB, maxprocess=${_NPROC} → X2T_MEMORY_LIMIT=${X2T_MEMORY_LIMIT} NODE_OPTIONS=${NODE_OPTIONS}"
 fi
